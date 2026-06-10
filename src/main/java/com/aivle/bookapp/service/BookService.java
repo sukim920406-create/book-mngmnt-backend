@@ -33,16 +33,17 @@ public class BookService {
     // 새 도서 등록 + 태그 저장 + 임베딩 저장
     @Transactional
     public Book create(Book book, List<String> tags, float[] embedding){
-        book.setCreatedAt(LocalDateTime.now());
-        book.setUpdatedAt(LocalDateTime.now());
         Book saved = bookRepository.save(book);
+
+        // 태그 저장
+        // 임베딩 저장
         return saved;
     }
 
 
     // 도서 부분 수정
     @Transactional
-    public Book update(Long id, Book book, List<String> tags, float[] embedding){
+    public Book update(Long id, Book book, List<String> tags, String embeddingJson, Long embeddingDurationMS){
         Book existing = findById(id);
 
         if (book.getTitle() != null) existing.setTitle(book.getTitle());
@@ -50,41 +51,75 @@ public class BookService {
         if (book.getSummary() != null) existing.setSummary(book.getSummary());
         if (book.getContent() != null) existing.setContent(book.getContent());
         if (book.getCoverImageUrl() != null) existing.setCoverImageUrl(book.getCoverImageUrl());
-        if (book.getLikes() != null) existing.setLikes(book.getLikes());
-        existing.setUpdatedAt(LocalDateTime.now());
 
         Book updated = bookRepository.save(existing);
+
+        // 태그 재저장
+        if (tags != null) {
+
+        }
+        // 임베딩 재저장
+        if (embeddingJson != null && !embeddingJson.isBlank()){
+
+        }
         return updated;
     }
 
     // 도서 삭제
     @Transactional
-    public void deleteBook(Long id) {
-        if (bookRepository.existsById(id)) {
-            bookRepository.deleteById(id);
-        } else {
+    public void delete(Long id) {
+        if (!bookRepository.existsById(id)) {
             throw new BookNotFoundException(id);
         }
+        bookRepository.deleteById(id);
     }
 
     // 좋아요 증가/감소
     @Transactional
     public Book updateLikes(Long id, int likes) {
+        Book existing = findById(id);
+        int current = existing.getLikes() == null ? 0: existing.getLikes();
+        existing.setLikes(current + likes);
+        return bookRepository.save(existing);
+    }
 
-        return null;
+    // AI 표지 저장
+    @Transactional
+    public Book updateCover(Long id, String coverImageUrl) {
+        Book existing = findById(id);
+        existing.setCoverImageUrl(coverImageUrl);
+        return bookRepository.save(existing);
+    }
+
+    // 임베딩 백필
+    @Transactional
+    public Book updateEmbedding(Long id, String embeddingJson, Long embeddingDurationMs) {
+        Book existing = findById(id);
+        bookEmbeddingService.save(id, embeddingJson, embeddingDurationMs);
+        return existing;
     }
 
     // 특정 태그에 속한 도서 목록 조회
     @Transactional(readOnly = true)
     public List<Book> findBooksByTagId(Long tagId){
+        // TagRepository 받으면 구현
         return List.of();
     }
 
     // 키워드 검색 + 정렬
     @Transactional(readOnly = true)
     public List<Book> findAllWithFilter(String keyword, String sort){
+        List<Book> result = (keyword == null || keyword.isBlank())
+                ? bookRepository.findAll()
+                : bookRepository.findByTitleOrAuthorContaining(keyword, keyword);
+        if ("newest".equals(sort)) result.sort((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()));
+        else if ("oldest".equals(sort)) result.sort((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()));
+        else if ("title".equals(sort)) result.sort((a, b) -> a.getTitle().compareTo(b.getTitle()));
+        else if ("author".equals(sort)) result.sort((a, b) -> a.getAuthor().compareTo(b.getAuthor()));
+        else if ("likes".equals(sort)) result.sort((a, b) -> (b.getLikes() == null ? 0 : b.getLikes()) - (a.getLikes() == null ? 0 : a.getLikes()));
 
-        return List.of();
+        // searchLogService.saveSearchLog() 호출
+        return result;
     }
 
     // AI 의미 검색 + 코사인 유사도 계산
