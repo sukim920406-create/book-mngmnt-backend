@@ -54,6 +54,11 @@ public class Book {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
+        // @Builder.Default 는 new Book()(Jackson 역직렬화) 경로엔 기본값을 적용하지 않아
+        // likes 가 null 로 들어올 수 있으므로 여기서 방어한다.
+        if (this.likes == null) {
+            this.likes = 0;
+        }
     }
 
     @PreUpdate
