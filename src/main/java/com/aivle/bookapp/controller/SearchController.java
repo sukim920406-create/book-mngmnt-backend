@@ -1,4 +1,53 @@
 package com.aivle.bookapp.controller;
 
+import com.aivle.bookapp.domain.Book;
+import com.aivle.bookapp.service.BookService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 검색 관련 REST API 요청을 처리하는 컨트롤러입니다.
+ */
+@Slf4j
+@RestController
+@RequestMapping("/search")
+@RequiredArgsConstructor
 public class SearchController {
+
+    private final BookService bookService;
+
+    // TODO: 1. 통합 검색 (POST /search)
+    // - body: { "query": "검색어", "sort": "newest", "tag": "태그" }
+    // - 키워드/태그/정렬 검색 실행 + 검색 로그 자동 저장
+
+    /**
+     * 2. AI 의미 검색 (POST /search/semantic)
+     * - body: { "queryVector": [...], "topK": 5 }
+     * - React에서 OpenAI로 변환한 검색어 벡터를 전달
+     * - Spring Boot에서 코사인 유사도 계산 후 유사 도서 반환
+     * - 검색 로그 자동 저장
+     */
+    @PostMapping("/semantic")
+    public ResponseEntity<List<Book>> semanticSearch(@RequestBody Map<String, Object> body) {
+        List<Double> vectorList = (List<Double>) body.get("queryVector");
+        int topK = body.containsKey("topK") ? (int) body.get("topK") : 5;
+
+        float[] queryVector = new float[vectorList.size()];
+        for (int i = 0; i < vectorList.size(); i++) {
+            queryVector[i] = vectorList.get(i).floatValue();
+        }
+
+        log.info("Request to semantic search - topK: {}", topK);
+        List<Book> result = bookService.semanticSearch(queryVector, null, topK);
+        return ResponseEntity.ok(result);
+    }
+
+    // TODO: 3. 검색 결과 클릭 로그 저장 (POST /search/{searchLogId}/click)
+    // - body: { "bookId": 1, "rankPosition": 1, "similarityScore": 0.9 }
+    // - AI 의미 검색 시에만 저장, 클릭 시 순위/유사도 기록
 }
