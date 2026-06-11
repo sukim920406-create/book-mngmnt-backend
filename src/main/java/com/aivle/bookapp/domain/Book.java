@@ -78,4 +78,8 @@ public class Book {
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
+
+    // === 요청/응답 전용 (DB 미저장) ===
+    @Transient
+    private Double similarityScore;
 }
