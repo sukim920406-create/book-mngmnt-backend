@@ -1,7 +1,10 @@
 package com.aivle.bookapp.controller;
 
 import com.aivle.bookapp.domain.Book;
+import com.aivle.bookapp.domain.Tag;
+import com.aivle.bookapp.dto.response.BookResponse;
 import com.aivle.bookapp.service.BookService;
+import com.aivle.bookapp.service.TagService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +15,8 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * 도서 관련 REST API 요청을 처리하는 컨트롤러입니다.
@@ -23,6 +28,7 @@ import java.util.Map;
 public class BookController {
 
     private final BookService bookService;
+    private final TagService  tagService;
 
     /**
      * 1. 도서 목록 조회 (통합 검색, 정렬, 태그 필터링 포함)
@@ -55,9 +61,17 @@ public class BookController {
      * 2. 특정 도서 상세 조회 (GET /books/{id})
      */
     @GetMapping("/{id}")
-    public ResponseEntity<Book> getBookById(@PathVariable Long id) {
+    public ResponseEntity<BookResponse> getBookById(@PathVariable Long id) {
         log.info("Request to get book by id: {}", id);
         Book book = bookService.findById(id);
+        Tag tag = tagService.findByBookId(id);
+        List<String> tagNames = tagService.findByBookId(book.getId()).stream()
+                .map(bt -> tagRepository.findById(bt.getTagId()).orElse(null))
+                .filter(Objects::nonNull)
+                .map(Tag::getName)
+                .collect(Collectors.toList());
+        book.setTags(tagNames);
+
         return ResponseEntity.ok(book);
     }
 
