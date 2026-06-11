@@ -2,6 +2,7 @@ package com.aivle.bookapp.controller;
 
 import com.aivle.bookapp.domain.Book;
 import com.aivle.bookapp.domain.Tag;
+import com.aivle.bookapp.dto.request.BookCreateRequest;
 import com.aivle.bookapp.dto.response.BookResponse;
 import com.aivle.bookapp.service.BookService;
 import com.aivle.bookapp.service.TagService;
@@ -9,8 +10,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import tools.jackson.core.type.TypeReference;
 
 import java.net.URI;
 import java.util.List;
@@ -37,14 +40,14 @@ public class BookController {
      * - GET /books?tag=스프링
      */
     @GetMapping
-    public ResponseEntity<List<Book>> getAllBooks(
+    public ResponseEntity<List<BookResponse>> getAllBooks(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) String tag) {
 
         log.info("Request to get books - keyword: {}, sort: {}, tag: {}", keyword, sort, tag);
 
-        List<Book> books;
+        List<BookResponse> books;
 
         // 태그별 도서 조건 처리
         if (tag != null && !tag.isEmpty()) {
@@ -64,25 +67,27 @@ public class BookController {
     public ResponseEntity<BookResponse> getBookById(@PathVariable Long id) {
         log.info("Request to get book by id: {}", id);
         Book book = bookService.findById(id);
-        Tag tag = tagService.findByBookId(id);
-        List<String> tagNames = tagService.findByBookId(book.getId()).stream()
-                .map(bt -> tagRepository.findById(bt.getTagId()).orElse(null))
-                .filter(Objects::nonNull)
-                .map(Tag::getName)
-                .collect(Collectors.toList());
-        book.setTags(tagNames);
+        BookResponse bookResponse = bookService.makeBookResponse(book);
 
-        return ResponseEntity.ok(book);
+        return ResponseEntity.ok(bookResponse);
     }
 
     /**
      * 3. 신규 도서 등록 (POST /books)
      */
     @PostMapping
-    public ResponseEntity<Book> createBook(@Valid @RequestBody Book book) {
-        log.info("Request to create book: {}", book.getTitle());
+    @Transactional
+    public ResponseEntity<Book> createBook(@Valid @RequestBody BookCreateRequest bookRequest) {
+        log.info("Request to create book: {}", bookRequest.getTitle());
         // 요청 body의 tags / embedding 을 그대로 전달 (Book 의 @Transient 필드)
-        Book savedBook = bookService.create(book, book.getTags(), book.getEmbeddingJson(), book.getEmbeddingDurationMs());
+        Book book = bookRequest.makeBook();
+        List<Float> embeddings = objectMapper.readValue(
+                bookRequest.getEmbeddingJson(),
+                new TypeReference<List<Float>>() {}
+        );
+        Book savedBook = bookService.create(book, bookRequest.getTags(), bookRequest.getEmbeddingJson(), bookRequest.getEmbeddingDurationMs());
+        book.
+
 
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")

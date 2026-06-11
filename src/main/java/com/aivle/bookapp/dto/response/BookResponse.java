@@ -41,7 +41,7 @@ public class BookResponse {
 
     private List<String> tags;
 
-    public static BookResponse BookResponseFrom(Book book, List<String> tags) {
+    public static BookResponse fromBookAndTags(Book book, List<String> tags) {
         return new BookResponse(book.getId(), book.getTitle(), book.getAuthor(), book.getContent(), book.getSummary(), book.getCopy(), book.getCoverImageUrl(), book.getLikes(), book.getCreatedAt(), book.getUpdatedAt(), tags);
     }
 }

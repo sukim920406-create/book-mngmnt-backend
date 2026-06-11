@@ -1,6 +1,7 @@
 package com.aivle.bookapp.dto.request;
 
 import com.aivle.bookapp.domain.Book;
+import com.aivle.bookapp.domain.BookTag;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -49,7 +50,7 @@ public class BookCreateRequest {
 
     private LocalDateTime updatedAt;
 
-    public Book toBook() {
-        return new Book(id, title, author, content, summary, copy, coverImageUrl, likes, createdAt);
+    public Book makeBook() {
+        return new Book(id, title, author, content, summary, copy, coverImageUrl, likes, createdAt, updatedAt);
     }
 }

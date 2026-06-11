@@ -4,6 +4,7 @@ package com.aivle.bookapp.service;
 import com.aivle.bookapp.domain.Book;
 import com.aivle.bookapp.domain.BookEmbedding;
 import com.aivle.bookapp.domain.Tag;
+import com.aivle.bookapp.dto.response.BookResponse;
 import com.aivle.bookapp.exception.BookNotFoundException;
 import com.aivle.bookapp.repository.BookEmbeddingRepository;
 import com.aivle.bookapp.repository.BookRepository;
@@ -34,6 +35,16 @@ public class BookService {
     private final TagRepository tagRepository;
     //private final SearchLogService searchLogService;
 
+    // Book을 BookResponse로 변환
+    public BookResponse makeBookResponse(Book book) {
+        return populateTags(book);
+    }
+
+    // List<Book>를 List<BookResponse>로 변환
+    public List<BookResponse> makeBookResponseList(List<Book> books) {
+        return books.stream().map(this::makeBookResponse).collect(Collectors.toList());
+    }
+
     // 전체 도서 목록 조회
     @Transactional(readOnly = true)
     public List<Book> findAll(){
@@ -47,35 +58,34 @@ public class BookService {
     public Book findById(Long id){
         Book book = bookRepository.findById(id)
                 .orElseThrow(() -> new BookNotFoundException(id));
-        populateTags(book);
         return book;
     }
 
     // 도서 객체에 태그 리스트 채우기 (BookTag → Tag 조립, 응답용)
-    private void populateTags(Book book) {
+    private BookResponse populateTags(Book book) {
         List<String> tagNames = bookTagRepository.findByBookId(book.getId()).stream()
                 .map(bt -> tagRepository.findById(bt.getTagId()).orElse(null))
                 .filter(Objects::nonNull)
                 .map(Tag::getName)
                 .collect(Collectors.toList());
-        book.setTags(tagNames);
+        return BookResponse.fromBookAndTags(book, tagNames);
     }
 
     // 태그만 별도 수정 (PATCH /books/{id}/tags)
     @Transactional
-    public Book updateTags(Long id, List<String> tags) {
+    public BookResponse updateTags(Long id, List<String> tags) {
         Book existing = findById(id);
         tagService.deleteByBookId(id);
         if (tags != null && !tags.isEmpty()) {
             tagService.saveBookTags(id, tags);
         }
         populateTags(existing);
-        return existing;
+        return makeBookResponse(existing);
     }
 
     // 새 도서 등록 + 태그 저장 + 임베딩 저장
     @Transactional
-    public Book create(Book book, List<String> tags, List<Float> embeddingJson, Long embeddingDurationMs){
+    public BookResponse create(Book book, List<String> tags, List<Float> embeddingJson, Long embeddingDurationMs){
         Book saved = bookRepository.save(book);
 
         // 태그 저장
@@ -96,14 +106,13 @@ public class BookService {
                     .build();
             bookEmbeddingService.save(embedding);
         }
-        populateTags(saved);
-        return saved;
+        return makeBookResponse(saved);
     }
 
 
     // 도서 부분 수정
     @Transactional
-    public Book update(Long id, Book book, List<String> tags, List<Float> embeddingJson, Long embeddingDurationMS){
+    public BookResponse update(Long id, Book book, List<String> tags, List<Float> embeddingJson, Long embeddingDurationMS){
         Book existing = findById(id);
 
         if (book.getTitle() != null) existing.setTitle(book.getTitle());
@@ -135,8 +144,7 @@ public class BookService {
                     .build();
             bookEmbeddingService.save(embedding);
         }
-        populateTags(updated);
-        return updated;
+        return makeBookResponse(updated);
     }
 
     // 도서 삭제
@@ -152,58 +160,64 @@ public class BookService {
 
     // 좋아요 수 설정 (프론트가 계산한 새 총합을 그대로 반영)
     @Transactional
-    public Book updateLikes(Long id, int likes) {
+    public BookResponse updateLikes(Long id, int likes) {
         Book existing = findById(id);
         existing.setLikes(Math.max(0, likes));
-        return bookRepository.save(existing);
+        Book saved = bookRepository.save(existing);
+        return makeBookResponse(saved);
     }
 
     // AI 표지 저장
     @Transactional
-    public Book updateCover(Long id, String coverImageUrl) {
+    public BookResponse updateCover(Long id, String coverImageUrl) {
         Book existing = findById(id);
         existing.setCoverImageUrl(coverImageUrl);
-        return bookRepository.save(existing);
+        Book saved = bookRepository.save(existing);
+        return makeBookResponse(saved);
     }
 
     // 임베딩 백필
-    @Transactional
-    public Book updateEmbedding(Long id, List<Float> embeddingJson, Long embeddingDurationMs) {
-        Book existing = findById(id);
-        bookEmbeddingService.deleteByBookId(id);
-        String jsonStr = embeddingJson.stream()
-                .map(String::valueOf)
-                .collect(Collectors.joining(",", "[", "]"));
-        BookEmbedding embedding = BookEmbedding.builder()
-                .bookId(id)
-                .embeddingJson(jsonStr)
-                .embeddingModel("text-embedding-3-small")
-                .embeddingDurationMs(embeddingDurationMs)
-                .embeddingUpdatedAt(LocalDateTime.now())
-                .build();
-        bookEmbeddingService.save(embedding);
-        return existing;
-    }
+//    @Transactional
+//    public Book updateEmbedding(Long id, List<Float> embeddingJson, Long embeddingDurationMs) {
+//        Book existing = findById(id);
+//        bookEmbeddingService.deleteByBookId(id);
+//        String jsonStr = embeddingJson.stream()
+//                .map(String::valueOf)
+//                .collect(Collectors.joining(",", "[", "]"));
+//        BookEmbedding embedding = BookEmbedding.builder()
+//                .bookId(id)
+//                .embeddingJson(jsonStr)
+//                .embeddingModel("text-embedding-3-small")
+//                .embeddingDurationMs(embeddingDurationMs)
+//                .embeddingUpdatedAt(LocalDateTime.now())
+//                .build();
+//        bookEmbeddingService.save(embedding);
+//        return existing;
+//    }
 
     // 특정 태그에 속한 도서 목록 조회
     @Transactional(readOnly = true)
-    public List<Book> findByTagName(String tagName) {
-        return tagService.findByName(tagName).stream()
+    public List<BookResponse> findByTagName(String tagName) {
+        List<Book> books = tagService.findByName(tagName).stream()
                 .flatMap(tag -> bookTagRepository.findByTagId(tag.getId()).stream())
                 .map(bookTag -> findById(bookTag.getBookId()))
                 .collect(Collectors.toList());
+
+        return makeBookResponseList(books);
     }
 
     // 키워드 검색 + 정렬
     @Transactional(readOnly = true)
-    public List<Book> findAllWithFilter(String keyword, String sort, String tag){
-        List<Book> result;
+    public List<BookResponse> findAllWithFilter(String keyword, String sort, String tag){
+        List<BookResponse> result;
         if (tag != null && !tag.isEmpty()) {
             result = findByTagName(tag);
         } else if (keyword != null && !keyword.isBlank()) {
-            result = bookRepository.findByTitleContainingOrAuthorContaining(keyword, keyword);
+            List<Book> books = bookRepository.findByTitleContainingOrAuthorContaining(keyword, keyword);
+            result = makeBookResponseList(books);
         } else {
-            result = bookRepository.findAll();
+            List<Book> books = bookRepository.findAll();
+            result = makeBookResponseList(books);
         }
         if ("newest".equals(sort)) result.sort((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()));
         else if ("oldest".equals(sort)) result.sort((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()));
