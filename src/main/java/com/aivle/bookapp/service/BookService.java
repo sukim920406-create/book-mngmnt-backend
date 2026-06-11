@@ -4,7 +4,9 @@ package com.aivle.bookapp.service;
 import com.aivle.bookapp.domain.Book;
 import com.aivle.bookapp.domain.BookEmbedding;
 import com.aivle.bookapp.domain.Tag;
+import com.aivle.bookapp.dto.request.BookUpdateRequest;
 import com.aivle.bookapp.dto.response.BookResponse;
+import com.aivle.bookapp.dto.response.BookSummaryResponse;
 import com.aivle.bookapp.exception.BookNotFoundException;
 import com.aivle.bookapp.repository.BookEmbeddingRepository;
 import com.aivle.bookapp.repository.BookRepository;
@@ -15,12 +17,10 @@ import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-//import com.aivle.bookapp.domain.SearchLog;
 import java.util.AbstractMap;
 
 
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -33,16 +33,17 @@ public class BookService {
     private final BookTagRepository bookTagRepository;
     private final BookEmbeddingRepository bookEmbeddingRepository;
     private final TagRepository tagRepository;
-    //private final SearchLogService searchLogService;
 
     // Book을 BookResponse로 변환
     public BookResponse makeBookResponse(Book book) {
         return populateTags(book);
     }
 
-    // List<Book>를 List<BookResponse>로 변환
-    public List<BookResponse> makeBookResponseList(List<Book> books) {
-        return books.stream().map(this::makeBookResponse).collect(Collectors.toList());
+    // List<Book>를 목록 조회용 DTO로 변환
+    public List<BookSummaryResponse> makeBookSummaryResponseList(List<Book> books) {
+        return books.stream()
+                .map(BookSummaryResponse::from)
+                .collect(Collectors.toList());
     }
 
     // 전체 도서 목록 조회
@@ -93,57 +94,48 @@ public class BookService {
             tagService.saveBookTags(saved.getId(), tags);
         }
         // 임베딩 저장
-        if (embeddingJson != null && !embeddingJson.isEmpty()){
-            String jsonStr = embeddingJson.stream()
-                    .map(String::valueOf)
-                    .collect(Collectors.joining(",", "[", "]"));
-            BookEmbedding embedding = BookEmbedding.builder()
-                    .bookId(saved.getId())
-                    .embeddingJson(jsonStr)
-                    .embeddingModel("text-embedding-3-small")
-                    .embeddingDurationMs(embeddingDurationMs)
-                    .embeddingUpdatedAt(LocalDateTime.now())
-                    .build();
-            bookEmbeddingService.save(embedding);
-        }
+        bookEmbeddingService.save(
+                saved.getId(),
+                embeddingJson,
+                embeddingDurationMs
+        );
         return makeBookResponse(saved);
     }
 
 
     // 도서 부분 수정
     @Transactional
-    public BookResponse update(Long id, Book book, List<String> tags, List<Float> embeddingJson, Long embeddingDurationMS){
+    public BookResponse update(Long id, BookUpdateRequest request) {
         Book existing = findById(id);
 
-        if (book.getTitle() != null) existing.setTitle(book.getTitle());
-        if (book.getAuthor() != null) existing.setAuthor(book.getAuthor());
-        if (book.getSummary() != null) existing.setSummary(book.getSummary());
-        if (book.getContent() != null) existing.setContent(book.getContent());
-        if (book.getCopy() != null) existing.setCopy(book.getCopy());
-        if (book.getCoverImageUrl() != null) existing.setCoverImageUrl(book.getCoverImageUrl());
+        if (request.hasTitle()) existing.setTitle(request.getTitle());
+        if (request.hasAuthor()) existing.setAuthor(request.getAuthor());
+        if (request.hasSummary()) existing.setSummary(request.getSummary());
+        if (request.hasContent()) existing.setContent(request.getContent());
+        if (request.hasCopy()) existing.setCopy(request.getCopy());
+        if (request.hasCoverImageUrl()) existing.setCoverImageUrl(request.getCoverImageUrl());
+        if (request.hasLikes()) existing.setLikes(Math.max(0, request.getLikes()));
 
         Book updated = bookRepository.save(existing);
 
         // 태그 재저장
-        if (tags != null) {
+        if (request.hasTags()) {
+            List<String> tags = request.getTags();
             tagService.deleteByBookId(id);
-            tagService.saveBookTags(id, tags);
+            if (!tags.isEmpty()) {
+                tagService.saveBookTags(id, tags);
+            }
         }
+
         // 임베딩 재저장
-        if (embeddingJson != null && !embeddingJson.isEmpty()) {
-            bookEmbeddingService.deleteByBookId(id);
-            String jsonStr = embeddingJson.stream()
-                    .map(String::valueOf)
-                    .collect(Collectors.joining(",", "[", "]"));
-            BookEmbedding embedding = BookEmbedding.builder()
-                    .bookId(id)
-                    .embeddingJson(jsonStr)
-                    .embeddingModel("text-embedding-3-small")
-                    .embeddingDurationMs(embeddingDurationMS)
-                    .embeddingUpdatedAt(LocalDateTime.now())
-                    .build();
-            bookEmbeddingService.save(embedding);
+        if (request.hasEmbeddingJson()) {
+            bookEmbeddingService.update(
+                    updated.getId(),
+                    request.getEmbeddingJson(),
+                    request.getEmbeddingDurationMs()
+            );
         }
+
         return makeBookResponse(updated);
     }
 
@@ -177,67 +169,57 @@ public class BookService {
     }
 
     // 임베딩 백필
-//    @Transactional
-//    public Book updateEmbedding(Long id, List<Float> embeddingJson, Long embeddingDurationMs) {
-//        Book existing = findById(id);
-//        bookEmbeddingService.deleteByBookId(id);
-//        String jsonStr = embeddingJson.stream()
-//                .map(String::valueOf)
-//                .collect(Collectors.joining(",", "[", "]"));
-//        BookEmbedding embedding = BookEmbedding.builder()
-//                .bookId(id)
-//                .embeddingJson(jsonStr)
-//                .embeddingModel("text-embedding-3-small")
-//                .embeddingDurationMs(embeddingDurationMs)
-//                .embeddingUpdatedAt(LocalDateTime.now())
-//                .build();
-//        bookEmbeddingService.save(embedding);
-//        return existing;
-//    }
+    @Transactional
+    public BookResponse updateEmbedding(Long id, List<Float> embeddingJson, Long embeddingDurationMs) {
+        Book existing = findById(id);
+        bookEmbeddingService.update(id, embeddingJson, embeddingDurationMs);
+        return makeBookResponse(existing);
+    }
 
     // 특정 태그에 속한 도서 목록 조회
     @Transactional(readOnly = true)
-    public List<BookResponse> findByTagName(String tagName) {
-        List<Book> books = tagService.findByName(tagName).stream()
+    public List<BookSummaryResponse> findByTagName(String tagName) {
+        return makeBookSummaryResponseList(findBooksByTagName(tagName));
+    }
+
+    private List<Book> findBooksByTagName(String tagName) {
+        return tagService.findByName(tagName).stream()
                 .flatMap(tag -> bookTagRepository.findByTagId(tag.getId()).stream())
                 .map(bookTag -> findById(bookTag.getBookId()))
                 .collect(Collectors.toList());
-
-        return makeBookResponseList(books);
     }
 
     // 키워드 검색 + 정렬
     @Transactional(readOnly = true)
-    public List<BookResponse> findAllWithFilter(String keyword, String sort, String tag){
-        List<BookResponse> result;
+    public List<BookSummaryResponse> findAllWithFilter(String keyword, String sort, String tag){
+        List<Book> books;
         if (tag != null && !tag.isEmpty()) {
-            result = findByTagName(tag);
+            books = findBooksByTagName(tag);
         } else if (keyword != null && !keyword.isBlank()) {
-            List<Book> books = bookRepository.findByTitleContainingOrAuthorContaining(keyword, keyword);
-            result = makeBookResponseList(books);
+            books = bookRepository.findByTitleContainingOrAuthorContaining(keyword, keyword);
         } else {
-            List<Book> books = bookRepository.findAll();
-            result = makeBookResponseList(books);
+            books = bookRepository.findAll();
         }
-        if ("newest".equals(sort)) result.sort((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()));
-        else if ("oldest".equals(sort)) result.sort((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()));
-        else if ("title".equals(sort)) result.sort((a, b) -> a.getTitle().compareTo(b.getTitle()));
-        else if ("author".equals(sort)) result.sort((a, b) -> a.getAuthor().compareTo(b.getAuthor()));
-        else if ("likes".equals(sort)) result.sort((a, b) -> (b.getLikes() == null ? 0 : b.getLikes()) - (a.getLikes() == null ? 0 : a.getLikes()));
+
+        if ("newest".equals(sort)) books.sort((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()));
+        else if ("oldest".equals(sort)) books.sort((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()));
+        else if ("title".equals(sort)) books.sort((a, b) -> a.getTitle().compareTo(b.getTitle()));
+        else if ("author".equals(sort)) books.sort((a, b) -> a.getAuthor().compareTo(b.getAuthor()));
+        else if ("likes".equals(sort)) books.sort((a, b) -> (b.getLikes() == null ? 0 : b.getLikes()) - (a.getLikes() == null ? 0 : a.getLikes()));
 
         // searchLogService.saveSearchLog() 호출
-        return result;
+        return makeBookSummaryResponseList(books);
     }
 
     // AI 의미 검색 + 코사인 유사도 계산
     @Transactional(readOnly = true)
-    public List<Book> semanticSearch(float[] queryVector, String query, int topK){
+    public List<BookSummaryResponse> semanticSearch(float[] queryVector, String query, int topK){
 
         // bookEmbeddingService에서 전체 임베딩 조회 후 코사인 유사도 계산
         List<BookEmbedding> allEmbeddings = bookEmbeddingRepository.findAll();
 
         // searchLogService.saveSearchLog() 호출 (searchType: "SEMANTIC")
-        List<Book> results;
+        List<BookSummaryResponse> results;
         results = allEmbeddings.stream()
                 .map(bookEmbedding -> {
                     float[] vector = parseEmbeddingJson(bookEmbedding.getEmbeddingJson());
@@ -247,11 +229,10 @@ public class BookService {
                 .filter(entry -> entry.getValue() > 0)
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
                 .limit(topK)
-                .map(entry -> {
-                    Book book = findById(entry.getKey());
-                    book.setSimilarityScore(entry.getValue()); // 유사도 점수 설정
-                    return book;
-                })
+                .map(entry -> BookSummaryResponse.from(
+                        findById(entry.getKey()),
+                        entry.getValue()
+                ))
                 .collect(Collectors.toList());
 
         // 검색 로그 저장
@@ -287,5 +268,3 @@ public class BookService {
         return dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 }
-
-

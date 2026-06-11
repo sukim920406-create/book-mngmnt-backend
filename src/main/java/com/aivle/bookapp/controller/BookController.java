@@ -1,9 +1,11 @@
 package com.aivle.bookapp.controller;
 
 import com.aivle.bookapp.domain.Book;
-import com.aivle.bookapp.domain.Tag;
 import com.aivle.bookapp.dto.request.BookCreateRequest;
+import com.aivle.bookapp.dto.request.BookLikesRequest;
+import com.aivle.bookapp.dto.request.BookUpdateRequest;
 import com.aivle.bookapp.dto.response.BookResponse;
+import com.aivle.bookapp.dto.response.BookSummaryResponse;
 import com.aivle.bookapp.service.BookService;
 import com.aivle.bookapp.service.TagService;
 import jakarta.validation.Valid;
@@ -13,13 +15,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
-import tools.jackson.core.type.TypeReference;
 
 import java.net.URI;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * 도서 관련 REST API 요청을 처리하는 컨트롤러입니다.
@@ -40,14 +38,14 @@ public class BookController {
      * - GET /books?tag=스프링
      */
     @GetMapping
-    public ResponseEntity<List<BookResponse>> getAllBooks(
+    public ResponseEntity<List<BookSummaryResponse>> getAllBooks(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) String tag) {
 
         log.info("Request to get books - keyword: {}, sort: {}, tag: {}", keyword, sort, tag);
 
-        List<BookResponse> books;
+        List<BookSummaryResponse> books;
 
         // 태그별 도서 조건 처리
         if (tag != null && !tag.isEmpty()) {
@@ -77,17 +75,11 @@ public class BookController {
      */
     @PostMapping
     @Transactional
-    public ResponseEntity<Book> createBook(@Valid @RequestBody BookCreateRequest bookRequest) {
+    public ResponseEntity<BookResponse> createBook(@Valid @RequestBody BookCreateRequest bookRequest) {
         log.info("Request to create book: {}", bookRequest.getTitle());
         // 요청 body의 tags / embedding 을 그대로 전달 (Book 의 @Transient 필드)
         Book book = bookRequest.makeBook();
-        List<Float> embeddings = objectMapper.readValue(
-                bookRequest.getEmbeddingJson(),
-                new TypeReference<List<Float>>() {}
-        );
-        Book savedBook = bookService.create(book, bookRequest.getTags(), bookRequest.getEmbeddingJson(), bookRequest.getEmbeddingDurationMs());
-        book.
-
+        BookResponse savedBook = bookService.create(book, bookRequest.getTags(), bookRequest.getEmbeddingJson(), bookRequest.getEmbeddingDurationMs());
 
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
@@ -103,10 +95,11 @@ public class BookController {
      * 실제 부분 반영은 BookService.update 의 null 체크가 담당.
      */
     @PatchMapping("/{id}")
-    public ResponseEntity<Book> updateBook(@PathVariable Long id, @RequestBody Book book) {
+    public ResponseEntity<BookResponse> updateBook(
+            @PathVariable Long id,
+            @Valid @RequestBody BookUpdateRequest bookRequest) {
         log.info("Request to update book id: {}", id);
-        // 요청 body의 tags / embedding 을 그대로 전달 (Book 의 @Transient 필드)
-        Book updatedBook = bookService.update(id, book, book.getTags(), book.getEmbeddingJson(), book.getEmbeddingDurationMs());
+        BookResponse updatedBook = bookService.update(id, bookRequest);
         return ResponseEntity.ok(updatedBook);
     }
 
@@ -126,10 +119,11 @@ public class BookController {
      * - 유저별 좋아요 상태는 프론트 localStorage 관리
      */
     @PatchMapping("/{id}/likes")
-    public ResponseEntity<Book> updateLikes(@PathVariable Long id, @RequestBody Map<String, Integer> body) {
-        int likes = body.getOrDefault("likes", 0);
-        log.info("Request to set likes for book id: {}, likes: {}", id, likes);
-        Book updatedBook = bookService.updateLikes(id, likes);
+    public ResponseEntity<BookResponse> updateLikes(
+            @PathVariable Long id,
+            @Valid @RequestBody BookLikesRequest request) {
+        log.info("Request to set likes for book id: {}, likes: {}", id, request.getLikes());
+        BookResponse updatedBook = bookService.updateLikes(id, request.getLikes());
         return ResponseEntity.ok(updatedBook);
     }
 
@@ -138,9 +132,11 @@ public class BookController {
      * - body: { "tags": ["판타지", "모험"] }
      */
     @PatchMapping("/{id}/tags")
-    public ResponseEntity<Book> updateTags(@PathVariable Long id, @RequestBody Book bookRequest) {
+    public ResponseEntity<BookResponse> updateTags(
+            @PathVariable Long id,
+            @RequestBody BookUpdateRequest bookRequest) {
         log.info("Request to update tags for book id: {}", id);
-        Book updatedBook = bookService.updateTags(id, bookRequest.getTags());
+        BookResponse updatedBook = bookService.updateTags(id, bookRequest.getTags());
         return ResponseEntity.ok(updatedBook);
     }
 
@@ -149,20 +145,22 @@ public class BookController {
      * - body: { "coverImageUrl": "https://..." }
      */
     @PatchMapping("/{id}/cover")
-    public ResponseEntity<Book> updateBookCover(@PathVariable Long id, @RequestBody Book bookRequest) {
+    public ResponseEntity<BookResponse> updateBookCover(
+            @PathVariable Long id,
+            @RequestBody BookUpdateRequest bookRequest) {
         log.info("Request to update cover for book id: {}", id);
-        Book updatedBook = bookService.updateCover(id, bookRequest.getCoverImageUrl());
+        BookResponse updatedBook = bookService.updateCover(id, bookRequest.getCoverImageUrl());
         return ResponseEntity.ok(updatedBook);
     }
 
     /**
      * 9. 도서 임베딩 백필 (PATCH /books/{id}/embedding)
-     * - body: { "embeddingJson": "...", "embeddingDurationMs": 123 }
+     * - body: { "embeddingJson": [0.1, 0.2], "embeddingDurationMs": 123 }
      */
     @PatchMapping("/{id}/embedding")
-    public ResponseEntity<Book> updateBookEmbedding(@PathVariable Long id, @RequestBody Book bookRequest) {
+    public ResponseEntity<BookResponse> updateBookEmbedding(@PathVariable Long id, @RequestBody BookUpdateRequest bookRequest) {
         log.info("Request to update embedding for book id: {}", id);
-        Book updatedBook = bookService.updateEmbedding(id, bookRequest.getEmbeddingJson(), bookRequest.getEmbeddingDurationMs());
+        BookResponse updatedBook = bookService.updateEmbedding(id, bookRequest.getEmbeddingJson(), bookRequest.getEmbeddingDurationMs());
         return ResponseEntity.ok(updatedBook);
     }
 }

@@ -3,6 +3,7 @@ package com.aivle.bookapp.controller;
 import com.aivle.bookapp.domain.Book;
 import com.aivle.bookapp.domain.SearchLog;
 import com.aivle.bookapp.domain.SearchResultClick;
+import com.aivle.bookapp.dto.response.BookSummaryResponse;
 import com.aivle.bookapp.service.BookService;
 import com.aivle.bookapp.service.SearchLogService;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +43,7 @@ public class SearchController {
         log.info("Request to search - query: {}, sort: {}, tag: {}", query, sort, tag);
 
         long startTime = System.currentTimeMillis();
-        List<Book> books = bookService.findAllWithFilter(query, sort, tag);
+        List<BookSummaryResponse> books = bookService.findAllWithFilter(query, sort, tag);
         long durationMs = System.currentTimeMillis() - startTime;
 
         Map<String, Object> response = new HashMap<>();
@@ -87,7 +88,7 @@ public class SearchController {
         log.info("Request to semantic search - topK: {}", topK);
 
         long startTime = System.currentTimeMillis();
-        List<Book> books = bookService.semanticSearch(queryVector, null, topK);
+        List<BookSummaryResponse> books = bookService.semanticSearch(queryVector, null, topK);
         long durationMs = System.currentTimeMillis() - startTime;
 
         Map<String, Object> response = new HashMap<>();

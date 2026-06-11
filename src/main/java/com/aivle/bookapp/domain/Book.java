@@ -39,7 +39,8 @@ public class Book {
 
     private String copy;
 
-    @Column(name = "cover_image_url")
+    @Lob
+    @Column(name = "cover_image_url", columnDefinition = "CLOB")
     private String coverImageUrl;
 
     @Builder.Default

@@ -1,7 +1,6 @@
 package com.aivle.bookapp.dto.request;
 
 import com.aivle.bookapp.domain.Book;
-import com.aivle.bookapp.domain.BookTag;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -39,18 +38,17 @@ public class BookCreateRequest {
     @Builder.Default
     private List<String> tags = new ArrayList<>();
 
-    private String embeddingJson;
+    private List<Float> embeddingJson;
 
     private Long embeddingDurationMs;
 
     @Builder.Default
     private Integer likes = 0;
 
-    private LocalDateTime createdAt;
-
-    private LocalDateTime updatedAt;
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
 
     public Book makeBook() {
-        return new Book(id, title, author, content, summary, copy, coverImageUrl, likes, createdAt, updatedAt);
+        return new Book(id, title, author, content, summary, copy, coverImageUrl, likes, createdAt, createdAt);
     }
 }

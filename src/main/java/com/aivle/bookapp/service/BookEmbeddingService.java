@@ -1,18 +1,25 @@
 package com.aivle.bookapp.service;
 
 import com.aivle.bookapp.domain.BookEmbedding;
+import com.aivle.bookapp.exception.BadRequestException;
 import com.aivle.bookapp.exception.BookEmbeddingNotFoundException;
 import com.aivle.bookapp.repository.BookEmbeddingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class BookEmbeddingService {
+    private static final String EMBEDDING_MODEL = "text-embedding-3-small";
+
     private final BookEmbeddingRepository bookEmbeddingRepository;
+    private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public BookEmbedding findById(Long bookId) {
@@ -25,8 +32,61 @@ public class BookEmbeddingService {
     }
 
     @Transactional
-    public BookEmbedding save(BookEmbedding emb) {
-        return bookEmbeddingRepository.save(emb);
+    public BookEmbedding save(Long bookId, List<Float> values, Long durationMs) {
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        validateDuration(durationMs);
+
+        BookEmbedding embedding = BookEmbedding.builder()
+                .bookId(bookId)
+                .embeddingJson(serialize(values))
+                .embeddingModel(EMBEDDING_MODEL)
+                .embeddingDurationMs(durationMs)
+                .embeddingUpdatedAt(LocalDateTime.now())
+                .build();
+
+        return bookEmbeddingRepository.save(embedding);
+    }
+
+    @Transactional
+    public BookEmbedding update(Long bookId, List<Float> values, Long durationMs) {
+        if (values == null || values.isEmpty()) {
+            throw new BadRequestException("embeddingJson 값이 필요합니다.");
+        }
+        validateDuration(durationMs);
+
+        BookEmbedding embedding = bookEmbeddingRepository.findByBookId(bookId);
+        if (embedding == null) {
+            embedding = BookEmbedding.builder()
+                    .bookId(bookId)
+                    .embeddingJson(serialize(values))
+                    .embeddingModel(EMBEDDING_MODEL)
+                    .embeddingDurationMs(durationMs)
+                    .embeddingUpdatedAt(LocalDateTime.now())
+                    .build();
+        } else {
+            embedding.setEmbeddingJson(serialize(values));
+            embedding.setEmbeddingModel(EMBEDDING_MODEL);
+            embedding.setEmbeddingDurationMs(durationMs);
+            embedding.setEmbeddingUpdatedAt(LocalDateTime.now());
+        }
+
+        return bookEmbeddingRepository.save(embedding);
+    }
+
+    private void validateDuration(Long durationMs) {
+        if (durationMs == null) {
+            throw new BadRequestException("embeddingDurationMs 값이 필요합니다.");
+        }
+    }
+
+    private String serialize(List<Float> values) {
+        try {
+            return objectMapper.writeValueAsString(values);
+        } catch (JacksonException e) {
+            throw new BadRequestException("임베딩 배열을 JSON 문자열로 변환할 수 없습니다.");
+        }
     }
 
     @Transactional
