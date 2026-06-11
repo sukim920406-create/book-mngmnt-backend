@@ -117,15 +117,14 @@ public class SearchController {
      * AI 의미 검색 시에만 저장, 클릭 시 순위/유사도 기록
      */
     @PostMapping("{searchLogId}/click")
-    public void semanticSearch(@PathVariable Long searchLogId, @RequestBody Map<String, Object> body) {
-        Long bookId = (Long)body.get("bookId");
-        Integer rankPosition = (Integer)body.get("rankPosition");
-        Float similarityScore = (Float)body.get("similarityScore");
+    public void saveClickLog(@PathVariable Long searchLogId, @RequestBody Map<String, Object> body) {
+        Long bookId = ((Number) body.get("bookId")).longValue();
+        Integer rankPosition = ((Number) body.get("rankPosition")).intValue();
+        Float similarityScore = ((Number) body.get("similarityScore")).floatValue();
         LocalDateTime time = LocalDateTime.now();
 
         SearchResultClick click = SearchResultClick.builder().searchLogId(searchLogId).bookId(bookId).rankPosition(rankPosition).similarityScore(similarityScore).clickedAt(time).build();
 
         searchLogService.saveClickLog(click);
     }
-
 }
