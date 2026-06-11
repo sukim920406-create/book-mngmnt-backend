@@ -209,13 +209,13 @@ public class BookService {
     // AI 의미 검색 + 코사인 유사도 계산
     @Transactional(readOnly = true)
     public List<Book> semanticSearch(float[] queryVector, String query, int topK){
-        long startTime = System.currentTimeMillis();
 
         // bookEmbeddingService에서 전체 임베딩 조회 후 코사인 유사도 계산
         List<BookEmbedding> allEmbeddings = bookEmbeddingRepository.findAll();
 
         // searchLogService.saveSearchLog() 호출 (searchType: "SEMANTIC")
-        List<Book> results = allEmbeddings.stream()
+        List<Book> results;
+        results = allEmbeddings.stream()
                 .map(bookEmbedding -> {
                     float[] vector = parseEmbeddingJson(bookEmbedding.getEmbeddingJson());
                     double score = cosineSimilarity(queryVector, vector);
@@ -224,7 +224,11 @@ public class BookService {
                 .filter(entry -> entry.getValue() > 0)
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
                 .limit(topK)
-                .map(entry -> findById(entry.getKey()))
+                .map(entry -> {
+                    Book book = findById(entry.getKey());
+                    book.setSimilarityScore(entry.getValue()); // 유사도 점수 설정
+                    return book;
+                })
                 .collect(Collectors.toList());
 
         // 검색 로그 저장
