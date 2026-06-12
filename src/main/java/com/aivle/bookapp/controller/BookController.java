@@ -15,9 +15,18 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
+import java.io.File;
+import java.io.IOException;
+import java.util.UUID;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 
 /**
  * 도서 관련 REST API 요청을 처리하는 컨트롤러입니다.
@@ -160,5 +169,27 @@ public class BookController {
         log.info("Request to update embedding for book id: {}", id);
         BookResponse updatedBook = bookService.updateEmbedding(id, bookRequest.getEmbeddingJson(), bookRequest.getEmbeddingDurationMs());
         return ResponseEntity.ok(updatedBook);
+    }
+
+    /**
+     * 10. 표지 이미지 업로드 (POST /books/upload-image)
+     * - multipart/form-data: { "file": 이미지 파일 }
+     * - 절대 경로 기반으로 /uploads 폴더에 저장 후 접근 가능한 URL 반환
+     */
+    @PostMapping("/upload-image")
+    public ResponseEntity<Map<String, String>> uploadImage(
+            @RequestParam("file") MultipartFile file) throws IOException {
+
+        Path uploadPath = Paths.get("uploads").toAbsolutePath().normalize();
+        if (!Files.exists(uploadPath)) {
+            Files.createDirectories(uploadPath);
+        }
+        String fileName = UUID.randomUUID() + ".png";
+        Path filePath  = uploadPath.resolve(fileName);
+        Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+
+        log.info("Image uploaded: {}", fileName);
+        String url = "http://localhost:8080/uploads/" + fileName;
+        return ResponseEntity.ok(Map.of("url", url));
     }
 }
